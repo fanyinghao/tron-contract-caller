@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="title">TRON 智能合约交互工具</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <!-- 
+        TRON 合约交互方案:
+        - Read 函数: 使用 TronGrid HTTP API (无需 TronWeb)
+        - Write 函数: 使用 TronLink 注入的 tronWeb (需要钱包签名)
+    -->
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --bg-card: #1c2128;
+            --border-color: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent-red: #ff4d4f;
+            --accent-green: #3fb950;
+            --accent-blue: #58a6ff;
+            --accent-purple: #bc8cff;
+            --accent-orange: #d29922;
+            --accent-cyan: #39c5cf;
+            --gradient-start: #ff4d4f;
+            --gradient-end: #d29922;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* 背景装饰 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 400px;
+            background:
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 77, 79, 0.15), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 10%, rgba(210, 153, 34, 0.1), transparent);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* 头部 */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 32px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--accent-blue);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 4px 20px rgba(88, 166, 255, 0.3);
+        }
+
+        .logo h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .wallet-status {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .network-badge {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .network-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-orange);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .connect-btn {
+            padding: 10px 24px;
+            background: var(--accent-blue);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .connect-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(255, 77, 79, 0.4);
+        }
+
+        .connect-btn.connected {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .address-display {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-cyan);
+        }
+
+        /* 主布局 */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 卡片样式 */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-title-icon {
+            width: 28px;
+            height: 28px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        /* 表单控件 */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        textarea.form-input {
+            min-height: 200px;
+            resize: vertical;
+            font-size: 0.8rem;
+        }
+
+        select.form-input {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+        }
+
+        /* 按钮 */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(88, 166, 255, 0.3);
+        }
+
+        .btn-success {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+        }
+
+        .btn-danger {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-block {
+            width: 100%;
+        }
+
+        /* 函数列表 */
+        /* 函数列表 */
+        .functions-container {
+            height: auto;
+            overflow: visible;
+        }
+
+        .functions-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .functions-container::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        .functions-container::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .function-tabs {
+            display: flex;
+            gap: 8px;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+
+        .function-tab {
+            padding: 8px 20px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .function-tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .function-tab.active {
+            background: var(--bg-tertiary);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .function-tab .count {
+            margin-left: 6px;
+            padding: 2px 8px;
+            background: var(--bg-primary);
+            border-radius: 10px;
+            font-size: 0.75rem;
+        }
+
+        .function-list {
+            padding: 16px;
+        }
+
+        .function-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .function-item:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .function-item.expanded {
+            border-color: var(--accent-blue);
+            box-shadow: 0 4px 20px rgba(88, 166, 255, 0.1);
+        }
+
+        .function-header {
+            padding: 14px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+        }
+
+        .function-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .function-type-badge {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .function-type-badge.read {
+            background: rgba(63, 185, 80, 0.15);
+            color: var(--accent-green);
+        }
+
+        .function-type-badge.write {
+            background: rgba(255, 77, 79, 0.15);
+            color: var(--accent-red);
+        }
+
+        .function-toggle {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            transition: transform 0.2s ease;
+        }
+
+        .function-item.expanded .function-toggle {
+            transform: rotate(180deg);
+        }
+
+        .function-body {
+            padding: 0 16px 16px;
+            display: none;
+            border-top: 1px solid var(--border-color);
+            margin-top: 0;
+            padding-top: 16px;
+        }
+
+        .function-item.expanded .function-body {
+            display: block;
+        }
+
+        .param-input {
+            margin-bottom: 12px;
+        }
+
+        .param-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            margin-bottom: 6px;
+        }
+
+        .param-name {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+        }
+
+        .param-type {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        .param-field {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .param-field:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .function-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .function-actions .btn {
+            flex: 1;
+            padding: 10px 16px;
+            font-size: 0.85rem;
+        }
+
+        /* 结果显示 */
+        .result-container {
+            margin-top: 16px;
+            padding: 14px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+        }
+
+        .result-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .result-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            word-break: break-all;
+            white-space: pre-wrap;
+            color: var(--accent-green);
+        }
+
+        .result-value.error {
+            color: var(--accent-red);
+        }
+
+        .result-value.pending {
+            color: var(--accent-orange);
+        }
+
+        /* 日志面板 */
+        .logs-panel {
+            margin-top: 24px;
+        }
+
+        .logs-content {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .log-entry {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 12px;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .log-message {
+            flex: 1;
+            word-break: break-all;
+        }
+
+        .log-message.success {
+            color: var(--accent-green);
+        }
+
+        .log-message.error {
+            color: var(--accent-red);
+        }
+
+        .log-message.info {
+            color: var(--accent-blue);
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state-text {
+            font-size: 0.95rem;
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Toast提示 */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 1000;
+        }
+
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px 20px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.success {
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .toast.error {
+            border-left: 3px solid var(--accent-red);
+        }
+
+        .toast.info {
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+
+            header {
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            .wallet-status {
+                width: 100%;
+                flex-direction: column;
+            }
+
+            .connect-btn {
+                width: 100%;
+            }
+        }
+
+        /* Language Switcher */
+        .language-switcher {
+            display: flex;
+            gap: 8px;
+        }
+
+        .lang-btn {
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .lang-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--text-secondary);
+        }
+
+        .lang-btn.active {
+            background: var(--bg-tertiary);
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">T</div>
+                <h1 data-i18n="header_title">TRON 智能合约交互工具</h1>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end;">
+                <div class="language-switcher">
+                    <button class="lang-btn active" onclick="setLanguage('zh')" id="langBtn_zh">中文</button>
+                    <button class="lang-btn" onclick="setLanguage('en')" id="langBtn_en">EN</button>
+                </div>
+                <div class="wallet-status">
+                    <div class="network-badge" id="networkBadge">
+                        <span class="network-dot"></span>
+                        <span id="networkName" data-i18n="wallet_not_connected">未连接</span>
+                    </div>
+                    <button class="connect-btn" id="connectBtn" onclick="connectWallet()" data-i18n="connect_wallet">
+                        🔗 连接 TronLink
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <!-- 左侧配置面板 -->
+            <div class="config-panel">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-title-icon">⚙️</span>
+                            <span data-i18n="config_title">合约配置</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="network_label">网络选择</label>
+                            <select class="form-input" id="networkSelect" onchange="switchNetwork()">
+                                <option value="mainnet" data-i18n="network_mainnet">主网 (Mainnet)</option>
+                                <option value="shasta" selected data-i18n="network_shasta">Shasta 测试网</option>
+                                <option value="nile" data-i18n="network_nile">Nile 测试网</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="contract_address_label">合约地址</label>
+                            <input type="text" class="form-input" id="contractAddress" placeholder="T... 格式的合约地址"
+                                data-i18n-placeholder="contract_address_placeholder">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" data-i18n="abi_label">合约 ABI (JSON 格式)</label>
+                            <textarea class="form-input" id="contractAbi" placeholder='粘贴合约 ABI JSON...'
+                                data-i18n-placeholder="abi_placeholder"></textarea>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="loadContract()"
+                            data-i18n="load_contract_btn">
+                            📄 加载合约
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 日志面板 -->
+                <div class="card logs-panel">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-title-icon">📋</span>
+                            <span data-i18n="logs_title">操作日志</span>
+                        </div>
+                        <button class="btn btn-secondary" onclick="clearLogs()"
+                            style="padding: 6px 12px; font-size: 0.8rem;" data-i18n="clear_logs_btn">
+                            清空
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="logs-content" id="logsContent">
+                            <div class="log-entry">
+                                <span class="log-time">--:--:--</span>
+                                <span class="log-message info" data-i18n="logs_waiting">等待操作...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧函数面板 -->
+            <div class="card functions-panel">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span class="card-title-icon">🔧</span>
+                        <span data-i18n="functions_title">合约函数</span>
+                    </div>
+                    <span id="walletAddress" class="address-display"></span>
+                </div>
+                <div class="function-tabs">
+                    <button class="function-tab active" data-type="all" onclick="filterFunctions('all')">
+                        <span data-i18n="tab_all">全部</span> <span class="count" id="countAll">0</span>
+                    </button>
+                    <button class="function-tab" data-type="read" onclick="filterFunctions('read')">
+                        <span data-i18n="tab_read">📖 Read</span> <span class="count" id="countRead">0</span>
+                    </button>
+                    <button class="function-tab" data-type="write" onclick="filterFunctions('write')">
+                        <span data-i18n="tab_write">✍️ Write</span> <span class="count" id="countWrite">0</span>
+                    </button>
+                </div>
+                <div class="functions-container">
+                    <div class="function-list" id="functionList">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📜</div>
+                            <div class="empty-state-text" data-i18n="empty_abi">请先加载合约 ABI</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let tronWebWallet = null;  // TronLink 钱包的 TronWeb 实例 (由 TronLink 注入)
+        let currentAbi = null;
+        let currentFilter = 'all';
+        let currentLang = localStorage.getItem('tron_contract_lang') || 'zh';
+
+        // 翻译数据
+        const translations = {
+            zh: {
+                title: "TRON 智能合约交互工具",
+                header_title: "TRON 智能合约交互工具",
+                connect_wallet: "🔗 连接 TronLink",
+                wallet_connected: "已连接",
+                wallet_not_connected: "未连接",
+                wallet_readonly: "只读",
+                config_title: "合约配置",
+                network_label: "网络选择",
+                network_mainnet: "主网 (Mainnet)",
+                network_shasta: "Shasta 测试网",
+                network_nile: "Nile 测试网",
+                contract_address_label: "合约地址",
+                contract_address_placeholder: "T... 格式的合约地址",
+                abi_label: "合约 ABI (JSON 格式)",
+                abi_placeholder: "粘贴合约 ABI JSON...",
+                load_contract_btn: "📄 加载合约",
+                logs_title: "操作日志",
+                clear_logs_btn: "清空",
+                logs_waiting: "等待操作...",
+                functions_title: "合约函数",
+                tab_all: "全部",
+                tab_read: "📖 Read",
+                tab_write: "✍️ Write",
+                empty_abi: "请先加载合约 ABI",
+                empty_functions: "未找到可调用的函数",
+                no_params: "无输入参数",
+                btn_read: "📖 查询",
+                btn_write: "✍️ 发送交易",
+                result_label: "执行结果",
+                querying: "查询中...",
+                waiting_signature: "等待 TronLink 签名确认...",
+                tx_sent: "交易已发送!",
+                tx_id: "TxID:",
+                input_placeholder: "输入 {type} 类型的值",
+                // Messages
+                msg_config_node: "已配置 {name} 节点 (HTTP API 模式)",
+                msg_page_loaded: "页面加载完成，Read 功能可用 (使用 HTTP API)",
+                msg_tronlink_connected: "TronLink 已连接: {address}",
+                msg_tronlink_installed: "TronLink 已安装，点击\"连接 TronLink\"按钮授权",
+                msg_unlock_wallet: "请先在 TronLink 中解锁钱包",
+                msg_no_tronlink: "未检测到 TronLink，Read 功能可用，Write 需要安装 TronLink",
+                msg_install_tronlink: "请先安装 TronLink 浏览器扩展",
+                msg_requesting_auth: "正在请求 TronLink 授权...",
+                msg_wallet_connected: "钱包连接成功",
+                msg_auth_queued: "授权请求已在队列中，请在 TronLink 中确认",
+                msg_auth_refused: "用户拒绝授权",
+                msg_auth_failed: "授权失败",
+                msg_wallet_connected_auth: "钱包已连接 (已授权)",
+                msg_connect_failed: "连接失败: {error}",
+                msg_switch_network: "请在 TronLink 中切换到 {network}",
+                msg_switch_network_hint: "提示: 请在 TronLink 钱包中手动切换到 {network}",
+                msg_switched_readonly: "已切换到 {network} (只读模式)",
+                msg_enter_address: "请输入合约地址",
+                msg_enter_abi: "请输入合约 ABI",
+                msg_abi_error: "ABI JSON 格式错误",
+                msg_contract_loaded: "合约加载成功: {address}",
+                msg_load_failed: "加载失败: {error}",
+                msg_func_not_found: "函数未找到",
+                msg_call_read: "调用 {func}()...",
+                msg_return: "{func}() 返回: {result}",
+                msg_error: "{func}() 错误: {error}",
+                msg_call_write: "发送交易 {func}()，等待签名...",
+                msg_tx_success: "交易发送成功: {txId}",
+                msg_tx_failed: "交易失败: {error}",
+                msg_logs_cleared: "日志已清空",
+                msg_requesting_switch: "正在请求切换到 {network}...",
+                msg_switch_success: "已成功切换到 {network}",
+                msg_switch_cancelled: "用户取消了网络切换"
+            },
+            en: {
+                title: "TRON Contract Caller",
+                header_title: "TRON Contract Caller",
+                connect_wallet: "🔗 Connect TronLink",
+                wallet_connected: "Connected",
+                wallet_not_connected: "Not Connected",
+                wallet_readonly: "Read-Only",
+                config_title: "Contract Config",
+                network_label: "Network",
+                network_mainnet: "Mainnet",
+                network_shasta: "Shasta Testnet",
+                network_nile: "Nile Testnet",
+                contract_address_label: "Contract Address",
+                contract_address_placeholder: "Contract Address (starts with T...)",
+                abi_label: "Contract ABI (JSON)",
+                abi_placeholder: "Paste Contract ABI JSON here...",
+                load_contract_btn: "📄 Load Contract",
+                logs_title: "Operation Logs",
+                clear_logs_btn: "Clear",
+                logs_waiting: "Waiting for operations...",
+                functions_title: "Functions",
+                tab_all: "All",
+                tab_read: "📖 Read",
+                tab_write: "✍️ Write",
+                empty_abi: "Please load contract ABI first",
+                empty_functions: "No callable functions found",
+                no_params: "No input parameters",
+                btn_read: "📖 Query",
+                btn_write: "✍️ Send",
+                result_label: "Result",
+                querying: "Querying...",
+                waiting_signature: "Waiting for TronLink signature...",
+                tx_sent: "Transaction Sent!",
+                tx_id: "TxID:",
+                input_placeholder: "Enter value for {type}",
+                // Messages
+                msg_config_node: "Configured {name} node (HTTP API mode)",
+                msg_page_loaded: "Page loaded, Read functions available (HTTP API)",
+                msg_tronlink_connected: "TronLink Connected: {address}",
+                msg_tronlink_installed: "TronLink installed, click 'Connect TronLink' to authorize",
+                msg_unlock_wallet: "Please unlock wallet in TronLink",
+                msg_no_tronlink: "TronLink not detected. Read available, Write requires TronLink",
+                msg_install_tronlink: "Please install TronLink extension",
+                msg_requesting_auth: "Requesting TronLink authorization...",
+                msg_wallet_connected: "Wallet Connected",
+                msg_auth_queued: "Authorization request queued, please confirm in TronLink",
+                msg_auth_refused: "User refused authorization",
+                msg_auth_failed: "Authorization failed",
+                msg_wallet_connected_auth: "Wallet Connected (Authorized)",
+                msg_connect_failed: "Connection failed: {error}",
+                msg_switch_network: "Please switch to {network} in TronLink",
+                msg_switch_network_hint: "Hint: Please manually switch to {network} in TronLink wallet",
+                msg_switched_readonly: "Switched to {network} (Read-Only)",
+                msg_enter_address: "Please enter contract address",
+                msg_enter_abi: "Please enter contract ABI",
+                msg_abi_error: "Invalid ABI JSON format",
+                msg_contract_loaded: "Contract loaded: {address}",
+                msg_load_failed: "Load failed: {error}",
+                msg_func_not_found: "Function not found",
+                msg_call_read: "Calling {func}()...",
+                msg_return: "{func}() returned: {result}",
+                msg_error: "{func}() error: {error}",
+                msg_call_write: "Sending transaction {func}(), waiting for signature...",
+                msg_tx_success: "Transaction sent: {txId}",
+                msg_tx_failed: "Transaction failed: {error}",
+                msg_logs_cleared: "Logs cleared",
+                msg_requesting_switch: "Requesting to switch to {network}...",
+                msg_switch_success: "Successfully switched to {network}",
+                msg_switch_cancelled: "Network switch cancelled by user"
+            }
+        };
+
+        // 获取翻译
+        function t(key, params = {}) {
+            let text = translations[currentLang][key] || key;
+            for (const [k, v] of Object.entries(params)) {
+                text = text.replace(`{${k}}`, v);
+            }
+            return text;
+        }
+
+        // 切换语言
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('tron_contract_lang', lang);
+            updateLanguage();
+        }
+
+        // 更新界面语言
+        function updateLanguage() {
+            // 更新按钮状态
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.id === `langBtn_${currentLang}`);
+            });
+
+            // 更新静态文本
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[currentLang][key]) {
+                    el.textContent = translations[currentLang][key];
+                }
+            });
+
+            // 更新 Placeholder
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (translations[currentLang][key]) {
+                    el.placeholder = translations[currentLang][key];
+                }
+            });
+
+            // 更新标题
+            document.title = t('title');
+            document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+
+            // 更新网络选择框
+            const networkSelect = document.getElementById('networkSelect');
+            if (networkSelect) {
+                Array.from(networkSelect.options).forEach(opt => {
+                    if (opt.value === 'mainnet') opt.text = t('network_mainnet');
+                    if (opt.value === 'shasta') opt.text = t('network_shasta');
+                    if (opt.value === 'nile') opt.text = t('network_nile');
+                });
+            }
+
+            // 更新动态内容
+            updateWalletStatus();
+            if (currentAbi) {
+                renderFunctions(currentAbi);
+            }
+        }
+
+        // 网络配置
+
+        // 网络配置
+        const networks = {
+            mainnet: {
+                name: '主网',
+                fullHost: 'https://api.trongrid.io',
+                explorer: 'https://tronscan.org',
+                chainId: '0x2b6653dc'
+            },
+            shasta: {
+                name: 'Shasta 测试网',
+                fullHost: 'https://api.shasta.trongrid.io',
+                explorer: 'https://shasta.tronscan.org',
+                chainId: '0x94a9059e'
+            },
+            nile: {
+                name: 'Nile 测试网',
+                fullHost: 'https://nile.trongrid.io',
+                explorer: 'https://nile.tronscan.org',
+                chainId: '0xcd8690dc'
+            }
+        };
+
+        // 获取当前网络配置
+        function getCurrentNetwork() {
+            const network = document.getElementById('networkSelect').value;
+            return networks[network];
+        }
+
+        // 地址转换工具
+        const addressUtils = {
+            // Base58 地址转 Hex (去掉T前缀，转换为41开头)
+            toHex: function (base58Address) {
+                if (!base58Address || base58Address.length !== 34) return null;
+                // 简化版：使用 TronLink 的 tronWeb 转换，或使用纯 JS 实现
+                if (window.tronWeb && window.tronWeb.address) {
+                    return window.tronWeb.address.toHex(base58Address);
+                }
+                // 备用：如果地址以41开头，直接返回
+                if (base58Address.startsWith('41')) {
+                    return base58Address;
+                }
+                return null;
+            },
+
+            // Base58 解码 (正确实现)
+            decodeBase58: function (str) {
+                const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+                // 使用 BigInt 处理大数
+                let n = BigInt(0);
+                for (let i = 0; i < str.length; i++) {
+                    const idx = ALPHABET.indexOf(str[i]);
+                    if (idx < 0) return null;
+                    n = n * BigInt(58) + BigInt(idx);
+                }
+
+                // 转换为字节数组
+                let hex = n.toString(16);
+                if (hex.length % 2) hex = '0' + hex;
+
+                const bytes = [];
+                for (let i = 0; i < hex.length; i += 2) {
+                    bytes.push(parseInt(hex.substring(i, i + 2), 16));
+                }
+
+                // 处理前导 '1' (Base58 的零)
+                for (let i = 0; i < str.length && str[i] === '1'; i++) {
+                    bytes.unshift(0);
+                }
+
+                return bytes;
+            },
+
+            // Base58 转 Hex 地址 (正确实现)
+            base58ToHex: function (base58) {
+                try {
+                    if (!base58 || !base58.startsWith('T')) return null;
+
+                    const decoded = this.decodeBase58(base58);
+                    if (!decoded || decoded.length < 25) return null;
+
+                    // 去掉最后 4 字节校验和，取前 21 字节
+                    const addressBytes = decoded.slice(0, 21);
+                    return addressBytes.map(b => ('0' + b.toString(16)).slice(-2)).join('');
+                } catch (e) {
+                    console.error('Base58 decode error:', e);
+                    return null;
+                }
+            },
+
+            // 获取地址参数 (用于合约调用，去掉 41 前缀并填充到 64 位)
+            getAddressParameter: function (address) {
+                if (address.startsWith('T')) {
+                    const hex = this.base58ToHex(address);
+                    if (hex && hex.startsWith('41')) {
+                        return hex.substring(2).padStart(64, '0');
+                    }
+                }
+                // 如果已经是 hex 格式
+                if (address.startsWith('41')) {
+                    return address.substring(2).padStart(64, '0');
+                }
+                if (address.startsWith('0x')) {
+                    return address.substring(2).padStart(64, '0');
+                }
+                return address.padStart(64, '0');
+            }
+        };
+
+        // ABI 编码工具
+        const abiEncoder = {
+            // 编码函数选择器
+            encodeFunctionSelector: function (funcName, inputTypes) {
+                const signature = funcName + '(' + inputTypes.join(',') + ')';
+                return this.keccak256(signature).substring(0, 8);
+            },
+
+            // 简化版 keccak256 (使用内置或外部库)
+            keccak256: function (str) {
+                // 如果 TronLink 可用，使用它的 sha3
+                if (window.tronWeb && window.tronWeb.sha3) {
+                    const hash = window.tronWeb.sha3(str, false);
+                    return hash.replace('0x', '');
+                }
+                // 否则使用简化的哈希 (注意：这不是真正的 keccak256)
+                // 实际应用中应该使用正确的哈希库
+                console.warn('Using fallback hash - may not work correctly');
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                    hash |= 0;
+                }
+                return Math.abs(hash).toString(16).padStart(8, '0');
+            },
+
+            // 编码参数
+            encodeParameter: function (type, value) {
+                if (type === 'address') {
+                    let hex = value;
+                    if (value.startsWith('T')) {
+                        hex = addressUtils.base58ToHex(value) || value;
+                    }
+                    // 地址填充到32字节
+                    return hex.replace('0x', '').replace('41', '').padStart(64, '0');
+                }
+                if (type.startsWith('uint') || type.startsWith('int')) {
+                    const num = BigInt(value);
+                    return num.toString(16).padStart(64, '0');
+                }
+                if (type === 'bool') {
+                    return (value === true || value === 'true' ? '1' : '0').padStart(64, '0');
+                }
+                if (type === 'bytes32') {
+                    return value.replace('0x', '').padStart(64, '0');
+                }
+                // 其他类型...
+                return value.toString(16).padStart(64, '0');
+            },
+
+            // 编码完整的函数调用数据
+            encodeFunction: function (funcName, inputs, values) {
+                const types = inputs.map(i => i.type);
+                const selector = this.encodeFunctionSelector(funcName, types);
+
+                let data = selector;
+                for (let i = 0; i < inputs.length; i++) {
+                    data += this.encodeParameter(inputs[i].type, values[i]);
+                }
+                return data;
+            },
+
+            // 解码返回值
+            decodeOutput: function (hexData, outputs) {
+                if (!hexData || hexData === '0x' || !outputs || outputs.length === 0) {
+                    return null;
+                }
+
+                const data = hexData.replace('0x', '');
+                const results = [];
+                let offset = 0;
+
+                for (const output of outputs) {
+                    const chunk = data.substring(offset, offset + 64);
+                    offset += 64;
+
+                    if (output.type.startsWith('uint') || output.type.startsWith('int')) {
+                        results.push(BigInt('0x' + chunk).toString());
+                    } else if (output.type === 'bool') {
+                        results.push(parseInt(chunk, 16) !== 0);
+                    } else if (output.type === 'address') {
+                        results.push('41' + chunk.substring(24));
+                    } else if (output.type === 'bytes32') {
+                        results.push('0x' + chunk);
+                    } else if (output.type === 'string') {
+                        // 字符串是动态类型，需要特殊处理
+                        const strOffset = parseInt(chunk, 16) * 2;
+                        const strLength = parseInt(data.substring(strOffset, strOffset + 64), 16);
+                        const strData = data.substring(strOffset + 64, strOffset + 64 + strLength * 2);
+                        let str = '';
+                        for (let i = 0; i < strData.length; i += 2) {
+                            str += String.fromCharCode(parseInt(strData.substring(i, i + 2), 16));
+                        }
+                        results.push(str);
+                    } else {
+                        results.push('0x' + chunk);
+                    }
+                }
+
+                return results.length === 1 ? results[0] : results;
+            }
+        };
+
+        // 初始化只读模式
+        function createReadOnlyTronWeb() {
+            const config = getCurrentNetwork();
+            log(t('msg_config_node', { name: config.name }), 'info');
+            return true;
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初始化网络配置
+            createReadOnlyTronWeb();
+            // 更新状态显示
+            updateWalletStatus();
+            // 检测 TronLink (根据官方文档使用轮询方式)
+            checkTronLink();
+            // 加载保存的配置
+            loadSavedConfig();
+            // 初始化语言
+            updateLanguage();
+
+            log(t('msg_page_loaded'), 'info');
+        });
+
+        // 检查 TronLink - 根据官方文档 https://developers.tron.network/docs/tronlink-integration
+        function checkTronLink() {
+            // 使用官方推荐的轮询方式检测 TronLink
+            const checkInterval = setInterval(() => {
+                // 官方推荐的检测方式
+                if (window.tronWeb && window.tronWeb.defaultAddress.base58) {
+                    clearInterval(checkInterval);
+
+                    tronWebWallet = window.tronWeb;
+                    log(t('msg_tronlink_connected', { address: window.tronWeb.defaultAddress.base58 }), 'success');
+                    updateWalletStatus();
+
+                    // 监听 TronLink 事件
+                    window.addEventListener('message', (e) => {
+                        if (e.data && e.data.message) {
+                            const action = e.data.message.action;
+                            if (action === 'accountsChanged' ||
+                                action === 'setAccount' ||
+                                action === 'setNode' ||
+                                action === 'connect' ||
+                                action === 'disconnect') {
+                                console.log('TronLink 事件:', action);
+                                updateWalletStatus();
+                            }
+                        }
+                    });
+
+                } else if (window.tronLink) {
+                    // TronLink 已安装但未授权
+                    clearInterval(checkInterval);
+                    log(t('msg_tronlink_installed'), 'info');
+
+                    if (window.tronLink.ready === false) {
+                        log(t('msg_unlock_wallet'), 'info');
+                    }
+                }
+            }, 100); // 官方示例使用 10ms，这里用 100ms 更合理
+
+            // 5秒后停止检测
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                if (!window.tronLink && !window.tronWeb) {
+                    log(t('msg_no_tronlink'), 'info');
+                }
+            }, 5000);
+        }
+
+        // 连接钱包 - 根据官方文档 https://developers.tron.network/docs/tronlink-integration
+        async function connectWallet() {
+            try {
+                // 检查 TronLink 是否安装
+                if (!window.tronLink && !window.tronWeb) {
+                    showToast(t('msg_install_tronlink'), 'error');
+                    window.open('https://www.tronlink.org/', '_blank');
+                    return;
+                }
+
+                log(t('msg_requesting_auth'), 'info');
+
+                // 官方推荐方式: 使用 tronLink.request
+                if (window.tronLink && window.tronLink.request) {
+                    const res = await window.tronLink.request({ method: 'tron_requestAccounts' });
+
+                    // 根据官方文档处理返回码
+                    // code: 200 - 用户接受授权
+                    // code: 4000 - 在队列中，无需重复提交
+                    // code: 4001 - 用户拒绝授权
+
+                    if (res.code === 200) {
+                        tronWebWallet = window.tronWeb;
+                        updateWalletStatus();
+                        log(t('msg_wallet_connected'), 'success');
+                        showToast(t('msg_wallet_connected'), 'success');
+                        return;
+                    } else if (res.code === 4000) {
+                        log(t('msg_auth_queued'), 'info');
+                        showToast(t('msg_auth_queued'), 'info');
+                        return;
+                    } else if (res.code === 4001) {
+                        throw new Error(t('msg_auth_refused'));
+                    } else {
+                        throw new Error(res.message || t('msg_auth_failed'));
+                    }
+                }
+
+                // 备用方式: 直接检查 window.tronWeb (可能已经授权)
+                if (window.tronWeb && window.tronWeb.defaultAddress && window.tronWeb.defaultAddress.base58) {
+                    tronWebWallet = window.tronWeb;
+                    updateWalletStatus();
+                    log(t('msg_wallet_connected_auth'), 'success');
+                    showToast(t('msg_wallet_connected_auth'), 'success');
+                    return;
+                }
+
+                throw new Error(t('msg_unlock_wallet'));
+
+            } catch (error) {
+                log(t('msg_connect_failed', { error: error.message }), 'error');
+                showToast(t('msg_connect_failed', { error: error.message }), 'error');
+            }
+        }
+
+        // 更新钱包状态
+        function updateWalletStatus() {
+            const connectBtn = document.getElementById('connectBtn');
+            const walletAddress = document.getElementById('walletAddress');
+            const networkBadge = document.getElementById('networkBadge');
+            const networkName = document.getElementById('networkName');
+
+            if (window.tronWeb && window.tronWeb.defaultAddress && window.tronWeb.defaultAddress.base58) {
+                tronWebWallet = window.tronWeb;
+                const address = tronWebWallet.defaultAddress.base58;
+                const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+
+                connectBtn.textContent = shortAddress;
+                connectBtn.classList.add('connected');
+                walletAddress.textContent = address;
+
+                // 检测当前网络
+                const fullNode = tronWebWallet.fullNode?.host || '';
+                let detectedNetwork = 'unknown';
+
+                if (fullNode.includes('nile')) {
+                    detectedNetwork = 'nile';
+                } else if (fullNode.includes('shasta')) {
+                    detectedNetwork = 'shasta';
+                } else if (fullNode.includes('trongrid.io') || fullNode.includes('tronstack')) {
+                    detectedNetwork = 'mainnet';
+                }
+
+                if (networks[detectedNetwork]) {
+                    networkName.textContent = networks[detectedNetwork].name + ' (' + t('wallet_connected') + ')';
+                    document.getElementById('networkSelect').value = detectedNetwork;
+                    // 同步更新只读实例
+                    createReadOnlyTronWeb();
+                } else {
+                    networkName.textContent = t('wallet_connected');
+                }
+            } else {
+                connectBtn.innerHTML = t('connect_wallet');
+                connectBtn.classList.remove('connected');
+                walletAddress.textContent = '';
+                const network = document.getElementById('networkSelect').value;
+                networkName.textContent = networks[network].name + ' (' + t('wallet_readonly') + ')';
+            }
+        }
+
+        // 切换网络
+        async function switchNetwork() {
+            const networkKey = document.getElementById('networkSelect').value;
+            const targetNetwork = networks[networkKey];
+
+            // 更新只读 TronWeb 实例
+            createReadOnlyTronWeb();
+
+            // 检查当前连接的钱包网络
+            if (tronWebWallet && window.tronWeb && window.tronWeb.fullNode && window.tronWeb.fullNode.host) {
+                const currentHost = window.tronWeb.fullNode.host;
+                let currentNetworkKey = 'unknown';
+
+                if (currentHost.includes('nile')) currentNetworkKey = 'nile';
+                else if (currentHost.includes('shasta')) currentNetworkKey = 'shasta';
+                else if (currentHost.includes('trongrid.io') || currentHost.includes('tronstack')) currentNetworkKey = 'mainnet';
+
+                if (currentNetworkKey !== networkKey) {
+                    // TronLink 不支持通过 API 切换 TRON 网络 (仅支持 EVM 网络切换)
+                    // 所以我们需要提示用户手动切换
+                    console.log('Network mismatch. Target:', networkKey, 'Current:', currentNetworkKey);
+                    showToast(t('msg_switch_network_hint', { network: targetNetwork.name }), 'info');
+                    log(t('msg_switch_network_hint', { network: targetNetwork.name }), 'info');
+                } else {
+                    log(t('msg_switched_readonly', { network: targetNetwork.name }), 'success');
+                }
+            } else {
+                showToast(t('msg_switched_readonly', { network: targetNetwork.name }), 'info');
+            }
+
+            // updateWalletStatus 会在用户实际切换网络后通过 setNode 事件触发
+            // 这里我们只更新只读状态，不强制刷新钱包状态，以免覆盖用户的选择
+        }
+
+        // 加载合约
+        function loadContract() {
+            try {
+                const address = document.getElementById('contractAddress').value.trim();
+                const abiJson = document.getElementById('contractAbi').value.trim();
+
+                if (!address) {
+                    throw new Error(t('msg_enter_address'));
+                }
+
+                if (!abiJson) {
+                    throw new Error(t('msg_enter_abi'));
+                }
+
+                // 解析 ABI
+                let abi;
+                try {
+                    abi = JSON.parse(abiJson);
+                } catch (e) {
+                    throw new Error(t('msg_abi_error'));
+                }
+
+                currentAbi = abi;
+                saveConfig(address, abiJson);
+                renderFunctions(abi);
+
+                log(t('msg_contract_loaded', { address: address }), 'success');
+                showToast(t('msg_contract_loaded', { address: address }), 'success');
+            } catch (error) {
+                log(t('msg_load_failed', { error: error.message }), 'error');
+                showToast(error.message, 'error');
+            }
+        }
+
+        // 渲染函数列表
+        function renderFunctions(abi) {
+            const functionList = document.getElementById('functionList');
+            const functions = abi.filter(item => item.type === 'function');
+
+            // 分类统计
+            const readFunctions = functions.filter(f => isReadFunction(f));
+            const writeFunctions = functions.filter(f => !isReadFunction(f));
+
+            document.getElementById('countAll').textContent = functions.length;
+            document.getElementById('countRead').textContent = readFunctions.length;
+            document.getElementById('countWrite').textContent = writeFunctions.length;
+
+            if (functions.length === 0) {
+                functionList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <div class="empty-state-text" data-i18n="empty_functions">${t('empty_functions')}</div>
+                    </div>
+                `;
+                return;
+            }
+
+            // 按类型排序，read在前
+            const sortedFunctions = [...readFunctions, ...writeFunctions];
+
+            functionList.innerHTML = sortedFunctions.map((func, index) => {
+                const isRead = isReadFunction(func);
+                const funcType = isRead ? 'read' : 'write';
+                const inputs = func.inputs || [];
+
+                return `
+                    <div class="function-item" data-type="${funcType}" data-index="${index}">
+                        <div class="function-header" onclick="toggleFunction(${index})">
+                            <span class="function-name">
+                                <span class="function-type-badge ${funcType}">${funcType}</span>
+                                ${func.name}
+                            </span>
+                            <span class="function-toggle">▼</span>
+                        </div>
+                        <div class="function-body">
+                            ${inputs.length > 0 ? inputs.map((input, i) => `
+                                <div class="param-input">
+                                    <label class="param-label">
+                                        <span class="param-name">${input.name || `param${i}`}</span>
+                                        <span class="param-type">(${input.type})</span>
+                                    </label>
+                                    <input type="text" class="param-field" 
+                                        id="param_${index}_${i}" 
+                                        placeholder="${t('input_placeholder', { type: input.type })}"
+                                        data-type="${input.type}">
+                                </div>
+                            `).join('') : `<p style="color: var(--text-secondary); font-size: 0.85rem;" data-i18n="no_params">${t('no_params')}</p>`}
+                            
+                            <div class="function-actions">
+                                ${isRead ? `
+                                    <button class="btn btn-success" onclick="callReadFunction('${func.name}', ${index})">
+                                        <span data-i18n="btn_read">${t('btn_read')}</span>
+                                    </button>
+                                ` : `
+                                    <button class="btn btn-danger" onclick="callWriteFunction('${func.name}', ${index})">
+                                        <span data-i18n="btn_write">${t('btn_write')}</span>
+                                    </button>
+                                `}
+                            </div>
+                            
+                            <div class="result-container" id="result_${index}" style="display: none;">
+                                <div class="result-label" data-i18n="result_label">${t('result_label')}</div>
+                                <div class="result-value" id="resultValue_${index}"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            filterFunctions(currentFilter);
+        }
+
+        // 判断是否为读函数
+        function isReadFunction(func) {
+            const state = func.stateMutability?.toLowerCase();
+            return state === 'view' || state === 'pure' || func.constant === true;
+        }
+
+        // 切换函数展开/折叠
+        function toggleFunction(index) {
+            const item = document.querySelector(`.function-item[data-index="${index}"]`);
+            item.classList.toggle('expanded');
+        }
+
+        // 过滤函数
+        function filterFunctions(type) {
+            currentFilter = type;
+            const tabs = document.querySelectorAll('.function-tab');
+            tabs.forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.type === type);
+            });
+
+            const items = document.querySelectorAll('.function-item');
+            items.forEach(item => {
+                if (type === 'all' || item.dataset.type === type) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        // 获取函数参数
+        // 获取排序后的函数列表 (与渲染顺序一致)
+        function getSortedFunctions() {
+            const functions = currentAbi.filter(item => item.type === 'function');
+            const readFunctions = functions.filter(f => isReadFunction(f));
+            const writeFunctions = functions.filter(f => !isReadFunction(f));
+            return [...readFunctions, ...writeFunctions];
+        }
+
+        function getParams(funcName, funcIndex) {
+            // 使用排序后的函数列表 (与渲染顺序一致)
+            const sortedFuncs = getSortedFunctions();
+            const func = sortedFuncs[funcIndex];
+
+            if (!func) {
+                console.error('Function not found at index:', funcIndex);
+                return [];
+            }
+
+            const inputs = func.inputs || [];
+            const params = [];
+
+            for (let i = 0; i < inputs.length; i++) {
+                const input = document.getElementById(`param_${funcIndex}_${i}`);
+                if (!input) {
+                    console.error(`Input element not found: param_${funcIndex}_${i}`);
+                    params.push('');
+                    continue;
+                }
+                let value = input.value.trim();
+
+                // 类型转换
+                const type = inputs[i].type;
+                if (type.includes('int') && !type.includes('[]')) {
+                    value = value;  // 保持字符串，TronWeb会处理
+                } else if (type === 'bool') {
+                    value = value.toLowerCase() === 'true';
+                } else if (type.includes('[]')) {
+                    try {
+                        value = JSON.parse(value);
+                    } catch (e) {
+                        value = value.split(',').map(v => v.trim());
+                    }
+                }
+
+                params.push(value);
+            }
+
+            return params;
+        }
+
+        // 调用读函数 - 使用 HTTP API，不需要钱包
+        async function callReadFunction(funcName, funcIndex) {
+            const resultContainer = document.getElementById(`result_${funcIndex}`);
+            const resultValue = document.getElementById(`resultValue_${funcIndex}`);
+
+            try {
+                const address = document.getElementById('contractAddress').value.trim();
+                if (!address) {
+                    throw new Error(t('msg_enter_address'));
+                }
+
+                resultContainer.style.display = 'block';
+                resultValue.className = 'result-value pending';
+                resultValue.textContent = t('querying');
+
+                log(t('msg_call_read', { func: funcName }), 'info');
+
+                // 获取函数信息 (使用排序后的列表)
+                const sortedFuncs = getSortedFunctions();
+                const func = sortedFuncs[funcIndex];
+
+                if (!func) {
+                    throw new Error(t('msg_func_not_found'));
+                }
+
+                // 获取参数
+                const params = getParams(funcName, funcIndex);
+
+                // 方式1: 如果 TronLink 可用，优先使用 TronLink 的 tronWeb
+                if (window.tronWeb && window.tronWeb.contract) {
+                    try {
+                        const contractInstance = await window.tronWeb.contract(currentAbi, address);
+                        let result;
+                        if (params.length > 0) {
+                            result = await contractInstance[funcName](...params).call();
+                        } else {
+                            result = await contractInstance[funcName]().call();
+                        }
+
+                        // 格式化结果
+                        const displayResult = formatResult(result);
+                        resultValue.className = 'result-value';
+                        resultValue.textContent = displayResult;
+                        log(t('msg_return', { func: funcName, result: displayResult }), 'success');
+                        return;
+                    } catch (e) {
+                        console.log('TronLink call failed, trying HTTP API:', e.message);
+                    }
+                }
+
+                // 方式2: 使用 TronGrid HTTP API (不需要 TronLink)
+                const config = getCurrentNetwork();
+
+                // 构建函数选择器
+                const inputTypes = (func.inputs || []).map(i => i.type);
+                const functionSelector = funcName + '(' + inputTypes.join(',') + ')';
+
+                // 构建参数 (编码为 hex)
+                let parameter = '';
+                for (let i = 0; i < (func.inputs || []).length; i++) {
+                    const paramValue = params[i];
+                    const paramType = func.inputs[i].type;
+
+                    if (paramType === 'address') {
+                        // 使用新的地址参数编码方法
+                        parameter += addressUtils.getAddressParameter(paramValue);
+                    } else {
+                        parameter += abiEncoder.encodeParameter(paramType, paramValue);
+                    }
+                }
+
+                log(`HTTP API 请求: ${functionSelector}`, 'info');
+
+                // 调用 TronGrid API - 使用 visible: true 支持 Base58 地址
+                const response = await fetch(`${config.fullHost}/wallet/triggerconstantcontract`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        owner_address: address, // 使用原始 Base58 地址
+                        contract_address: address,
+                        function_selector: functionSelector,
+                        parameter: parameter,
+                        visible: true // 使用 visible: true 支持 Base58 地址
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.result && data.result.result === false) {
+                    throw new Error(data.result.message || t('msg_load_failed', { error: 'Unknown error' }));
+                }
+
+                if (!data.constant_result || data.constant_result.length === 0) {
+                    throw new Error(t('msg_load_failed', { error: 'No return value' }));
+                }
+
+                // 解码返回值
+                const hexResult = data.constant_result[0];
+                const decodedResult = abiEncoder.decodeOutput(hexResult, func.outputs || []);
+
+                const displayResult = typeof decodedResult === 'object'
+                    ? JSON.stringify(decodedResult, null, 2)
+                    : String(decodedResult);
+
+                resultValue.className = 'result-value';
+                resultValue.textContent = displayResult;
+                log(t('msg_return', { func: funcName, result: displayResult }), 'success');
+
+            } catch (error) {
+                resultValue.className = 'result-value error';
+                resultValue.textContent = error.message;
+                log(t('msg_error', { func: funcName, error: error.message }), 'error');
+            }
+        }
+
+        // 格式化结果
+        function formatResult(result) {
+            if (typeof result === 'object') {
+                if (result._isBigNumber || (result.toString && typeof result.toNumber === 'function')) {
+                    return result.toString();
+                } else {
+                    return JSON.stringify(result, (key, value) => {
+                        if (typeof value === 'bigint') {
+                            return value.toString();
+                        }
+                        if (value && value._isBigNumber) {
+                            return value.toString();
+                        }
+                        return value;
+                    }, 2);
+                }
+            }
+            return String(result);
+        }
+
+        // 调用写函数 - 需要钱包签名
+        async function callWriteFunction(funcName, funcIndex) {
+            const resultContainer = document.getElementById(`result_${funcIndex}`);
+            const resultValue = document.getElementById(`resultValue_${funcIndex}`);
+
+            try {
+                // 检查钱包连接 - 使用 window.tronWeb (由 TronLink 注入)
+                const tw = window.tronWeb;
+                if (!tw || !tw.defaultAddress || !tw.defaultAddress.base58) {
+                    throw new Error(t('msg_unlock_wallet'));
+                }
+
+                const address = document.getElementById('contractAddress').value.trim();
+                if (!address) {
+                    throw new Error(t('msg_enter_address'));
+                }
+
+                resultContainer.style.display = 'block';
+                resultValue.className = 'result-value pending';
+                resultValue.textContent = t('waiting_signature');
+
+                log(t('msg_call_write', { func: funcName }), 'info');
+
+                // 使用 TronLink 注入的 tronWeb 创建合约实例
+                const contractInstance = await tw.contract(currentAbi, address);
+
+                // 获取参数
+                const params = getParams(funcName, funcIndex);
+
+                // 调用函数 (会触发 TronLink 签名弹窗)
+                let txId;
+                if (params.length > 0) {
+                    txId = await contractInstance[funcName](...params).send({
+                        feeLimit: 100_000_000,  // 100 TRX
+                        callValue: 0
+                    });
+                } else {
+                    txId = await contractInstance[funcName]().send({
+                        feeLimit: 100_000_000,
+                        callValue: 0
+                    });
+                }
+
+                // 获取当前网络的浏览器
+                const network = document.getElementById('networkSelect').value;
+                const explorer = networks[network].explorer;
+
+                resultValue.className = 'result-value';
+                resultValue.innerHTML = `
+                    ${t('tx_sent')}<br>
+                    ${t('tx_id')} <a href="${explorer}/#/transaction/${txId}" target="_blank" style="color: var(--accent-blue);">${txId}</a>
+                `;
+
+                log(t('msg_tx_success', { txId: txId }), 'success');
+                showToast(t('msg_tx_success', { txId: txId }), 'success');
+
+            } catch (error) {
+                resultValue.className = 'result-value error';
+                resultValue.textContent = error.message || t('msg_tx_failed', { error: 'Unknown' });
+                log(t('msg_error', { func: funcName, error: error.message }), 'error');
+                showToast(t('msg_tx_failed', { error: error.message }), 'error');
+            }
+        }
+
+        // 日志功能
+        function log(message, type = 'info') {
+            const logsContent = document.getElementById('logsContent');
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `
+                <span class="log-time">${time}</span>
+                <span class="log-message ${type}">${message}</span>
+            `;
+
+            logsContent.insertBefore(entry, logsContent.firstChild);
+
+            // 限制日志数量
+            while (logsContent.children.length > 50) {
+                logsContent.removeChild(logsContent.lastChild);
+            }
+        }
+
+        function clearLogs() {
+            const logsContent = document.getElementById('logsContent');
+            logsContent.innerHTML = `
+                <div class="log-entry">
+                    <span class="log-time">--:--:--</span>
+                    <span class="log-message info" data-i18n="msg_logs_cleared">${t('msg_logs_cleared')}</span>
+                </div>
+            `;
+        }
+
+        // Toast 提示
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+                <span>${message}</span>
+            `;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // 本地存储
+        function saveConfig(address, abi) {
+            localStorage.setItem('tron_contract_address', address);
+            localStorage.setItem('tron_contract_abi', abi);
+        }
+
+        function loadSavedConfig() {
+            const address = localStorage.getItem('tron_contract_address');
+            const abi = localStorage.getItem('tron_contract_abi');
+
+            if (address) {
+                document.getElementById('contractAddress').value = address;
+            }
+            if (abi) {
+                document.getElementById('contractAbi').value = abi;
+            }
+        }
+    </script>
+</body>
+
+</html>
